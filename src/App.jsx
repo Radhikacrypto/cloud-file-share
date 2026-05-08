@@ -7,13 +7,13 @@ import Subscription from "./pages/Subscription.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import {RedirectToSignIn, SignedIn, SignedOut} from "@clerk/clerk-react";
 import {Toaster} from "react-hot-toast";
-//import {UserCreditsProvider} from "./context/UserCreditsContext.jsx";
 import PublicFileView from "./pages/PublicFileView.jsx";
+import { UserCreditsProvider } from "./context/UserCreditsContext.jsx";
 
 
 const App = () => {
     return (
-        
+        <UserCreditsProvider>
             <BrowserRouter>
             <Toaster/>
                 <Routes>
@@ -56,7 +56,7 @@ const App = () => {
                     <Route path="/*" element={<RedirectToSignIn />} />
                 </Routes>
             </BrowserRouter>
-        
+        </UserCreditsProvider>
     )
 }
 
