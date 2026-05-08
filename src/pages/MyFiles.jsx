@@ -1,5 +1,4 @@
-
-import DashboardLayout from "../layout/DashboardLayout";
+import DashboardLayout from "../layout/DashboardLayout.jsx";
 import {useEffect, useState} from "react";
 import { File, FileIcon, FileText, Grid, Image, List, Music, Video } from "lucide-react";
 import {useAuth} from "@clerk/clerk-react";
@@ -7,34 +6,42 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import {useNavigate} from "react-router-dom";
 import FileCard from "../components/FileCard.jsx";
+import {apiEndpoints} from "../util/apiEndpoints.js";
+import ConfirmationDialog from "../components/ConfirmationDialog.jsx";
+import LinkShareModal from "../components/LinkShareModal.jsx";
 import FileListRow from "../components/FileListRow.jsx";
 
-
-const MyFiles=()=>{
+const MyFiles = () => {
     const [files, setFiles] = useState([]);
     const [viewMode, setViewMode] = useState("list");
+    const {getToken} = useAuth();
+    const navigate = useNavigate();
+    const [deleteConfirmation, setDeleteConfirmation] = useState({
+        isOpen: false,
+        fileId: null
+    });
+    const [shareModal, setShareModal] = useState({
+        isOpen: false,
+        fileId: null,
+        link: ""
+    });
 
-    const {getToken}=useAuth();
-
-    const navigate=useNavigate();
-
-    //fetching siles for logged in user 
-
-    const fetchFiles= async()=>{
+    //fetching the files for a logged in user
+    const fetchFiles = async () => {
         try {
-            const token= await getToken();
-           const response= await axios.get('http://localhost:8080/api/v1.0/files/my',{headers: {Authorization: `Bearer ${token}`}});
-           if (response.status === 200) {
-            
+            const token = await getToken();
+            console.log(token);
+            const response = await axios.get(apiEndpoints.FETCH_FILES, {headers: {Authorization: `Bearer ${token}`}});
+            if (response.status === 200) {
                 setFiles(response.data);
             }
-        } catch (error) {
+        }catch (error) {
             console.error('Error fetching the files from server: ', error);
             toast.error('Error fetching the files from server: ', error.message);
         }
     }
 
-    //Toggle the public private status
+    //Toggles the public/private status of a file
     const togglePublic = async (fileToUpdate) => {
         try {
             const token = await getToken();
@@ -44,6 +51,82 @@ const MyFiles=()=>{
         }catch (error) {
             console.error('Error toggling file status', error);
             toast.error('Error toggling file status: ', error.message);
+        }
+    }
+
+    //Handle file download
+    const handleDownload = async (file) => {
+        try {
+            const token = await getToken();
+            const response = await axios.get(apiEndpoints.DOWNLOAD_FILE(file.id), {headers: {Authorization: `Bearer ${token}`}, responseType: 'blob'});
+
+            // create a blob url and trigger download
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute("download", file.name);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url); // clean up the object url
+        }catch (error) {
+            console.error('Download failed', error);
+            toast.error('Error downloading file', error.message);
+        }
+    }
+
+    //Closes the delete confirmation modal
+    const closeDeleteConfirmation = () => {
+        setDeleteConfirmation({
+            isOpen: false,
+            fileId: null
+        })
+    }
+
+    //Opens the delete confirmation modal
+    const openDeleteConfirmation = (fileId) => {
+        setDeleteConfirmation({
+            isOpen: true,
+            fileId
+        })
+    }
+
+    //opens the share link modal
+    const openShareModal = (fileId) => {
+        const link = `${window.location.origin}/file/${fileId}`;
+        setShareModal({
+            isOpen: true,
+            fileId,
+            link
+        });
+    }
+
+    //close the share link modal
+    const closeShareModal = () => {
+        setShareModal({
+            isOpen: false,
+            fileId: null,
+            link: ""
+        });
+    }
+
+    //Delete a file after confirmation
+    const handleDelete = async () => {
+        const fileId = deleteConfirmation.fileId;
+        if (!fileId) return;
+
+        try {
+            const token = await getToken();
+            const response = await axios.delete(apiEndpoints.DELETE_FILE(fileId), {headers: {Authorization: `Bearer ${token}`}});
+            if (response.status === 204) {
+                setFiles(files.filter((file) => file.id !== fileId));
+                closeDeleteConfirmation();
+            } else {
+                toast.error('Error deleting file');
+            }
+        }catch (error) {
+            console.error('Error deleting file', error);
+            toast.error('Error deleting file', error.message);
         }
     }
 
@@ -72,23 +155,22 @@ const MyFiles=()=>{
 
         return <FileIcon size={24} className="text-purple-500" />
     }
-    return(
+
+    return (
         <DashboardLayout activeMenu="My Files">
             <div className="p-6">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">My files {files.length}</h2>
+                    <h2 className="text-2xl font-bold">My Files {files.length}</h2>
                     <div className="flex items-center gap-3">
-                        <List 
-                        onClick={()=>setViewMode("list")}
-                        size={24}
-                        className={`cursor-pointer transition-colors ${viewMode === 'list' ? 'text-blue-600': 'text-gray-400 hover:text-gray-600'}`}/>
-
+                        <List
+                            onClick={() => setViewMode("list")}
+                            size={24}
+                            className={`cursor-pointer transition-colors ${viewMode === 'list' ? 'text-blue-600': 'text-gray-400 hover:text-gray-600'}`} />
                         <Grid
                             size={24}
                             onClick={() => setViewMode("grid")}
                             className={`cursor-pointer transition-colors ${viewMode === 'grid' ? 'text-blue-600': 'text-gray-400 hover:text-gray-600'}`} />
                     </div>
-
                 </div>
 
                 {files.length === 0 ? (
@@ -151,6 +233,25 @@ const MyFiles=()=>{
                         </table>
                     </div>
                 )}
+                {/* Delete confiramtion dialog*/}
+                <ConfirmationDialog
+                    isOpen={deleteConfirmation.isOpen}
+                    onClose={closeDeleteConfirmation}
+                    title="Delete File"
+                    message="Are you sure want to delete this file? This action cannot be undone."
+                    confirmText="Delete"
+                    cancelText="Cancel"
+                    onConfirm={handleDelete}
+                    confirmButtonClass="bg-red-600 hover:bg-red-700"
+                />
+
+                {/* Share link modal */}
+                <LinkShareModal
+                    isOpen={shareModal.isOpen}
+                    onClose={closeShareModal}
+                    link={shareModal.link}
+                    title="Share File"
+                />
             </div>
         </DashboardLayout>
     )
